@@ -1,0 +1,10 @@
+.vs/
+.slnx/
+target/
+*.class
+*.jar
+*.war
+*.log
+.idea/
+*.iml
+.env

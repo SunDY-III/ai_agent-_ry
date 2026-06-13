@@ -1,0 +1,86 @@
+server:
+  port: 8080
+  # SSE 长连接：异步请求超时设大一点，避免流式输出中途被容器切断
+  tomcat:
+    connection-timeout: 60s
+
+spring:
+  application:
+    name: zhishu-ai-agent
+  datasource:
+    url: jdbc:mysql://localhost:3306/zhishu?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: root
+    password: root123
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: none            # 表结构以 sql/schema.sql 为准，避免 JPA 自动建表丢失全文索引
+    open-in-view: false
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    listener:
+      simple:
+        acknowledge-mode: manual   # 手动 ack：解析失败可重回队列
+        prefetch: 1
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+minio:
+  endpoint: http://localhost:9000
+  access-key: minioadmin
+  secret-key: minioadmin
+  bucket: zhishu-docs
+
+llm:
+  # 以 DeepSeek 为例；任何兼容 OpenAI 协议的模型都可以直接替换 base-url / model
+  base-url: https://api.deepseek.com/v1
+  api-key: ${LLM_API_KEY:sk-replace-me}
+  chat-model: deepseek-chat
+  # Embedding 单独配置（DeepSeek 暂无 embedding，可用通义/智谱/硅基流动的兼容接口）
+  embedding-base-url: ${EMBEDDING_BASE_URL:https://api.siliconflow.cn/v1}
+  embedding-api-key: ${EMBEDDING_API_KEY:sk-replace-me}
+  embedding-model: BAAI/bge-m3
+  max-concurrency: 8          # LLM 调用层信号量并发上限，防止打爆 API 配额
+
+app:
+  jwt:
+    secret: zhishu-demo-secret-please-change-this-to-a-long-random-string!
+    expire-hours: 72
+  rag:
+    chunk-size: 500           # 切分目标长度（字符）
+    chunk-overlap: 80         # 滑动窗口重叠，防止关键句被切断在边界
+    vector-top-k: 8           # 向量召回数
+    keyword-top-k: 8          # 关键词召回数
+    rerank-top-n: 4           # 重排后进入 Prompt 的片段数
+    rrf-k: 60                 # RRF 平滑常数
+    confidence-threshold: 0.45  # 检索置信度低于该值 -> 转工单 Agent
+  semantic-cache:
+    threshold: 0.95           # 语义缓存命中阈值（偏保守，降低误命中）
+    ttl-hours: 24
+  memory:
+    window-size: 10           # 保留最近 N 轮
+    summary-trigger: 20       # 消息数超过该值触发历史摘要压缩
+  rate-limit:
+    user-capacity: 20         # 用户级：每窗口最大请求数
+    api-capacity: 200         # 接口级
+    window-seconds: 60
+  agent:
+    max-tool-rounds: 6        # Agent 最大推理轮次，防死循环烧 Token
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      llm:
+        sliding-window-size: 10            # 统计最近 10 次调用
+        failure-rate-threshold: 50         # 失败率 >= 50% 熔断打开
+        wait-duration-in-open-state: 30s   # 打开 30s 后进入半开试探
+        permitted-number-of-calls-in-half-open-state: 2
